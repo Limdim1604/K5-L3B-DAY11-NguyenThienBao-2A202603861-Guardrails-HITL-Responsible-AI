@@ -1,5 +1,56 @@
 # Day 11 — Controlled Agent Security (2026)
 
+## 🎓 Thông tin bài nộp
+
+| | |
+|---|---|
+| **Họ tên** | Nguyễn Thiên Bảo |
+| **MSSV** | 2A202603861 |
+| **Lớp** | K5 — L3B — Day 11 |
+| **Email** | 26ai.baont5@vinuni.edu.vn |
+| **GitHub** | [Limdim1604](https://github.com/Limdim1604) |
+
+### Kết quả (từ `outputs/`, sinh bằng lệnh lab — xem `outputs/lab_report.md`)
+
+| Hạng mục | Kết quả |
+|---|---|
+| Safe queries bị chặn nhầm | **0 / 6** |
+| Attack queries bị chặn | **7 / 9** (input guardrail 7; 2 câu còn lại model từ chối, không lộ secret) |
+| Rate limit (10 req / 60s) | 15 gửi → 10 qua, **5 chặn** |
+| Edge cases | 5 case (rỗng, emoji, > 2000 ký tự, tiếng Việt không dấu, chuỗi SQL) |
+| Egress allowlist | 6 case — chỉ HTTPS `api/cases.vinbank.example` + payload sạch mới được phép |
+| Red (`gpt-4o-mini`) | **Leak 4 / 5** → chọn bonus **B1** |
+| Red Advance | Leak 0 / 5 (cả 5 vượt regex L1, bị NeMo input rail chặn) |
+
+### Phần đã làm
+
+- **CP2** — `src/guardrails/input_guardrails.py`: chuẩn hoá Unicode (NFKC, xoá zero-width, bỏ dấu tiếng Việt) rồi dò 13 regex injection (EN + VI), lọc topic banking, giới hạn độ dài input. `src/guardrails/output_guardrails.py`: redact API key, password, host `*.internal`, email, SĐT, CCCD + bắt secret bị chèn ký tự (`a-d-m-i-n-1-2-3`).
+- **CP3** — `src/assignment/`: rate limiter sliding window theo user; audit log (input, output, layer, latency); monitoring + alert; `is_egress_allowed` (allowlist host chính xác + chặn payload nhạy cảm); `run_assignment_suite` chạy 4 nhóm test và ghi `outputs/results.json`, `audit_log.json`, `metrics.json`. Thứ tự plugin: `rate_limiter → input_guardrail → output_guardrail`; audit/monitoring là observer bên ngoài.
+- **CP4** — `src/attacks/attacks.py`: 5 prompt (completion, đổi định dạng YAML, viết truyện, xác nhận side-channel, leo thang nhiều bước), giả danh nhân viên / kiểm toán nội bộ và tránh từ khoá regex của Red Advance.
+
+### Ghi chú về nhà cung cấp model Blue
+
+OpenRouter `liquid/lfm-3-1.7b:free` liên tục trả lỗi 429 / 504 trong lúc làm bài, nên Blue được gọi **trực tiếp qua API của Liquid AI** (`https://api.liquid.ai/openai/v1`, model id `lfm3-1.7b`) — **cùng model LFM3 1.7B**, chỉ khác nhà cung cấp. Bật bằng `BLUE_PROVIDER=liquid` + `LIQUID_API_KEY` trong `.env` (xem `.env.example`); bỏ `BLUE_PROVIDER` thì quay lại OpenRouter như starter. Red / Red Advance giữ nguyên `openai:gpt-4o-mini`.
+
+### Cách chạy lại
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cp .env.example .env    # điền key
+python src/main.py --part 2   # CP2 — in terminal
+python src/main.py --part 3   # CP3 — outputs/results.json, audit_log.json, metrics.json
+python src/main.py --part 4   # CP4 — outputs/attack_results.json + chi tiết
+pytest tests/smoke -q && pytest tests/public -q
+python scripts/grade.py --submission-dir . --out outputs/grade_report.json
+```
+
+### Khai báo sử dụng AI
+
+Có dùng công cụ AI để **hỗ trợ** đọc tài liệu, gợi ý và debug code. Tôi đã đọc, chỉnh sửa, chạy kiểm tra và chịu trách nhiệm toàn bộ phần code, prompt tấn công và kết quả nộp.
+
+---
+
 > 👤 **Hình thức:** bài tập **cá nhân** (1 người / 1 MSSV).  
 > 🎯 **Mục tiêu:** đóng vai **Blue Team** để học cách xây Guardrails phòng thủ, rồi đóng vai **Red Team** để tấn công agent **Red** hoặc **Red Advance**.  
 > ✅ Làm theo **Checkpoint 1 → 5** trong [`CHECKPOINTS.md`](CHECKPOINTS.md) · nộp theo [`SUBMISSION.md`](SUBMISSION.md).
